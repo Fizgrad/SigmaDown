@@ -1,0 +1,7 @@
+node_modules/
+dist/
+public/vendor/
+src-tauri/target/
+
+artifacts/
+src-tauri/gen/
