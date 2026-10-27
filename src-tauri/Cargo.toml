@@ -1,6 +1,6 @@
 [package]
 name = "sigmadown"
-version = "0.1.0"
+version = "0.1.1"
 description = "A lightweight offline Markdown reader"
 authors = ["SigmaDown contributors"]
 edition = "2021"

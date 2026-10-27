@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
@@ -51,3 +52,11 @@ $('#open').addEventListener('click', choose); $('#welcome-open').addEventListene
 document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); choose(); } });
 article.addEventListener('click', e => { const a = e.target.closest('a'); if (a && !a.getAttribute('href')?.startsWith('#')) { e.preventDefault(); $('#status').textContent = '外部链接请复制后在浏览器中打开。'; } });
 invoke('startup_file').then(path => { if (path) read(path); }).catch(() => {});
+
+const appWindow = getCurrentWindow();
+for (const [id, action] of [['minimize', 'minimize'], ['maximize', 'toggleMaximize'], ['close', 'close']]) {
+  document.getElementById(id).addEventListener('click', () => appWindow[action]().catch(error => { $('#status').textContent = `窗口操作失败：${error}`; }));
+}
+document.querySelectorAll('[data-resize]').forEach(handle => handle.addEventListener('mousedown', event => {
+  if (event.button === 0) appWindow.startResizeDragging(handle.dataset.resize).catch(error => { $('#status').textContent = `调整窗口大小失败：${error}`; });
+}));
