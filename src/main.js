@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save as saveDialog, confirm } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { createCloseHandler } from './window-close.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
@@ -162,9 +163,9 @@ document.querySelectorAll('[data-resize]').forEach(handle => handle.addEventList
   if (event.button === 0) appWindow.startResizeDragging(handle.dataset.resize).catch(error => { $('#status').textContent = `调整窗口大小失败：${error}`; });
 }));
 
-let closing = false;
-appWindow.onCloseRequested(async event => {
-  if (closing || (!isDirty() && !pendingSave)) return;
-  event.preventDefault();
-  if (await discardChanges()) { closing = true; await appWindow.close(); }
-}).catch(error => { $('#status').textContent = `无法监听窗口关闭：${error}`; });
+appWindow.onCloseRequested(createCloseHandler({
+  needsConfirmation: () => !!isDirty() || !!pendingSave,
+  confirmDiscard: discardChanges,
+  destroy: () => appWindow.destroy(),
+  reportError: error => { $('#status').textContent = `关闭窗口失败：${error}`; }
+})).catch(error => { $('#status').textContent = `无法监听窗口关闭：${error}`; });
