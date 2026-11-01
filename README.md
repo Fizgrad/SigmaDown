@@ -1,8 +1,8 @@
 # SigmaDown
 
-一个基于 Tauri 系统 WebView 的深色 Markdown 桌面阅读器。渲染方案取自 [fizgrad.github.io 的 Markdown 阅读器](https://github.com/fizgrad/fizgrad.github.io)：Marked、DOMPurify、Highlight.js、MathJax 和 Mermaid。依赖随应用打包，阅读无需联网；公式和 Mermaid 按需加载。应用不会上传文档。
+一个基于 Tauri 系统 WebView 的深色 Markdown 桌面阅读与编辑应用。渲染方案取自 [fizgrad.github.io 的 Markdown 阅读器](https://github.com/fizgrad/fizgrad.github.io)：Marked、DOMPurify、Highlight.js、MathJax 和 Mermaid。依赖随应用打包，阅读无需联网；公式和 Mermaid 按需加载。应用不会上传文档。
 
-支持 Markdown、表格、代码高亮、公式（`$...$`、`$$...$$`、`\\(...\\)`、`\\[...\\]`）、Mermaid 和标题目录。使用“打开文件”或 Ctrl+O（macOS 为 Cmd+O）选择 UTF-8 文件。文件关联启动会打开传入的文档。
+支持分栏编辑、实时预览、Markdown、表格、代码高亮、公式（`$...$`、`$$...$$`、`\\(...\\)`、`\\[...\\]`）、Mermaid 和标题目录。使用“打开文件”或 Ctrl+O（macOS 为 Cmd+O）选择 UTF-8 文件。文件关联启动会打开传入的文档。
 
 ## 安装与默认打开方式
 
@@ -24,4 +24,4 @@ npm run tauri -- build
 
 ## 当前限制
 
-这是阅读器，暂不支持编辑、保存、拖放、文档相对路径图片或在应用内打开外部链接。macOS 已运行的应用接收 Finder 后续“打开文件”事件尚未实现，可使用应用内打开。暂未对不同平台的资源占用和启动时间做基准测试。
+这是阅读器，暂不支持拖放、文档相对路径图片或在应用内打开外部链接。新建文件保存时不能覆盖已有文件；已有文件如果被外部修改，保存会提示冲突。macOS 已运行的应用接收 Finder 后续“打开文件”事件尚未实现，可使用应用内打开。暂未对不同平台的资源占用和启动时间做基准测试。

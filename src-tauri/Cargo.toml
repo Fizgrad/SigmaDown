@@ -1,6 +1,6 @@
 [package]
 name = "sigmadown"
-version = "0.1.2"
+version = "0.2.0"
 description = "A lightweight offline Markdown reader"
 authors = ["SigmaDown contributors"]
 edition = "2021"
@@ -11,3 +11,4 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
+tempfile = "3"
