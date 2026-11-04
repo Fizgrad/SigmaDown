@@ -1,6 +1,6 @@
 {
   "name": "sigmadown",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "A lightweight offline Markdown reader",
@@ -15,6 +15,7 @@
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "dompurify": "^3.0.0",
     "github-markdown-css": "^5.0.0",
+    "github-slugger": "^2.0.0",
     "highlight.js": "^11.0.0",
     "marked": "^15.0.0",
     "mathjax": "^3.2.2",

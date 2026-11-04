@@ -2,6 +2,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, save as saveDialog, confirm } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { createCloseHandler } from './window-close.js';
+import { createPaneLayout } from './pane-layout.js';
+import { createHeadingIds, detectLineEnding, serializeText } from './document-format.js';
+import { openDocumentSafely } from './open-document.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
@@ -42,7 +45,9 @@ async function render(doc) {
   article.querySelectorAll('[data-math-id]').forEach(el => { const m = math.get(el.dataset.mathId); if (m) el.textContent = m.display ? `\\[${m.tex}\\]` : `\\(${m.tex}\\)`; });
   $('#welcome').hidden = true; article.hidden = false;
   const toc = $('#toc'); toc.replaceChildren();
-  article.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach((h, i) => { h.id = `section-${i}`; const a = document.createElement('a'); a.href = `#${h.id}`; a.textContent = h.textContent; a.className = `level-${h.tagName[1]}`; toc.append(a); });
+  const headings = [...article.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+  const ids = createHeadingIds(headings.map(h => h.textContent));
+  headings.forEach((h, i) => { h.id = ids[i]; const a = document.createElement('a'); a.href = `#${encodeURIComponent(h.id)}`; a.textContent = h.textContent; a.className = `level-${h.tagName[1]}`; toc.append(a); });
   article.querySelectorAll('pre code:not(.language-mermaid)').forEach(el => hljs.highlightElement(el));
   article.querySelectorAll('pre:not(:has(.language-mermaid))').forEach(pre => { const b = document.createElement('button'); b.className = 'copy'; b.textContent = '复制'; b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(pre.querySelector('code')?.textContent || pre.textContent); b.textContent = '已复制'; setTimeout(() => b.textContent = '复制', 1500); } catch { b.textContent = '复制失败'; } }); pre.append(b); });
   if (article.querySelector('.math-slot')) { try { await loadMath(); if (current !== generation) return; await window.MathJax.typesetPromise([article]); if (current !== generation) return; } catch { if (current === generation) $('#status').textContent = '公式渲染失败。'; } }
@@ -50,6 +55,7 @@ async function render(doc) {
   if (diagrams.length) { try { mermaidLoader ||= import('mermaid'); const { default: mermaid } = await mermaidLoader; if (current !== generation) return; mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' }); for (const [i, code] of diagrams.entries()) { try { const key = `${i}\0${code.textContent}`; let svg = diagramCache.get(key); if (!svg) { ({ svg } = await mermaid.render(`diagram-${current}-${i}`, code.textContent)); if (current !== generation) return; if (diagramCache.size >= 32) diagramCache.delete(diagramCache.keys().next().value); diagramCache.set(key, svg); } if (current !== generation) return; const box = document.createElement('div'); box.className = 'diagram'; box.innerHTML = svg; code.parentElement.replaceWith(box); } catch { code.parentElement.insertAdjacentText('beforebegin', '图表渲染失败：'); } } } catch { if (current === generation) $('#status').textContent = '图表加载失败。'; } }
 }
 const editor = $('#editor');
+const paneLayout = createPaneLayout({ container: document.querySelector('main'), sidebarSplitter: $('#sidebar-splitter'), editorSplitter: $('#editor-splitter') });
 let documentState = null;
 let editing = false;
 let pendingSave = null;
@@ -71,6 +77,7 @@ function updateDocumentUI() {
   $('#save').disabled = !dirty || !!pendingSave;
   $('#save').title = dirty ? '保存更改' : '没有未保存的更改';
   document.body.classList.toggle('is-editing', !!documentState && editing);
+  paneLayout.setEditing(!!documentState && editing);
 }
 function scheduleRender(immediate = false) {
   ++generation;
@@ -94,7 +101,7 @@ async function discardChanges() {
 }
 function showDocument(doc, path, edit = false) {
   editor.value = doc.content;
-  documentState = { name: doc.name, path, diskContent: path ? doc.content : null, savedText: path ? editor.value : null };
+  documentState = { name: doc.name, path, diskContent: path ? doc.content : null, savedText: path ? editor.value : null, lineEnding: detectLineEnding(doc.content) };
   editing = edit;
   $('#status').textContent = '';
   $('#welcome').hidden = true;
@@ -105,8 +112,17 @@ function showDocument(doc, path, edit = false) {
 }
 async function read(path) {
   const request = ++openRequest;
-  try { const doc = await invoke('read_document', { path }); if (request === openRequest) showDocument(doc, path); }
-  catch (e) { if (request === openRequest) $('#status').textContent = String(e); }
+  try {
+    const result = await openDocumentSafely({
+      load: () => invoke('read_document', { path }),
+      getState: () => documentState,
+      getText: () => editor.value,
+      isCurrent: () => request === openRequest,
+      confirmDiscard: discardChanges,
+      show: doc => showDocument(doc, path)
+    });
+    if (result === 'changed-again') $('#status').textContent = '文档在确认期间又被修改，已保留当前内容。';
+  } catch (e) { if (request === openRequest) $('#status').textContent = String(e); }
 }
 async function choose() {
   if (!await discardChanges()) return;
@@ -129,10 +145,11 @@ async function saveDocument() {
         path = await saveDialog({ defaultPath: 'untitled.md', filters: [{ name: 'Markdown', extensions: ['md','markdown','txt'] }] });
         if (!path) return;
       }
-      await invoke('save_document', { path, content: snapshot, expected: state.diskContent });
+      const diskSnapshot = serializeText(snapshot, state.lineEnding);
+      await invoke('save_document', { path, content: diskSnapshot, expected: state.diskContent });
       state.path = path;
       state.name = path.split(/[\\/]/).pop() || path;
-      state.diskContent = snapshot;
+      state.diskContent = diskSnapshot;
       state.savedText = snapshot;
       $('#status').textContent = '已保存';
     } catch (error) { $('#status').textContent = `保存失败：${error}`; }
@@ -152,7 +169,27 @@ document.addEventListener('keydown', e => {
   if (e.key.toLowerCase() === 'o') { e.preventDefault(); choose(); }
   if (e.key.toLowerCase() === 's') { e.preventDefault(); saveDocument(); }
 });
-article.addEventListener('click', e => { const a = e.target.closest('a'); if (a && !a.getAttribute('href')?.startsWith('#')) { e.preventDefault(); $('#status').textContent = '外部链接请复制后在浏览器中打开。'; } });
+function navigateFragment(event, anchor) {
+  const href = anchor.getAttribute('href');
+  if (!href?.startsWith('#')) return false;
+  event.preventDefault();
+  let id;
+  try { id = decodeURIComponent(href.slice(1)); } catch { return true; }
+  const target = [...article.querySelectorAll('[id]')].find(node => node.id === id || node.id === `user-content-${id}`);
+  if (target) target.scrollIntoView({ block: 'start' });
+  return true;
+}
+$('#toc').addEventListener('click', event => {
+  const anchor = event.target.closest('a');
+  if (anchor) navigateFragment(event, anchor);
+});
+article.addEventListener('click', event => {
+  const anchor = event.target.closest('a');
+  if (anchor && !navigateFragment(event, anchor)) {
+    event.preventDefault();
+    $('#status').textContent = '外部链接请复制后在浏览器中打开。';
+  }
+});
 invoke('startup_file').then(path => { if (path && !documentState) read(path); }).catch(() => {});
 
 const appWindow = getCurrentWindow();

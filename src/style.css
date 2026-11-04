@@ -31,3 +31,17 @@ aside,.markdown-body pre,.diagram{scrollbar-color:#405267 transparent;scrollbar-
 .is-editing .content{padding:32px 4%}.is-editing aside{width:190px;padding:32px 18px}
 @media(max-width:1000px){.is-editing aside{display:none}.is-editing .content{padding:28px 3%}.header-actions{gap:6px}#filename{max-width:140px}}
 @media(max-width:800px){#open kbd,#save kbd{display:none}.editor-panel{flex-basis:45%}.header-actions{gap:4px}.brand{font-size:15px}.brand img{width:25px}#new-document,#edit-toggle,#save,#open{padding:7px 8px}.titlebar-drag{min-width:4px}}
+
+/* Resizable reading panes. */
+main{--sidebar-width:240px;--editor-width:360px}
+main aside, .is-editing main aside{display:block;box-sizing:border-box;width:var(--sidebar-width);min-width:0;flex:0 0 var(--sidebar-width);border-right:0}
+main .editor-panel{box-sizing:border-box;flex:0 0 var(--editor-width);width:var(--editor-width);min-width:0;max-width:none;border-right:0}
+main .content{min-width:0}
+.pane-splitter{position:relative;flex:0 0 8px;cursor:col-resize;touch-action:none;outline:none;background:transparent}
+.pane-splitter::after{content:"";position:absolute;inset:0 3px;background:#273548;transition:background .15s}
+.pane-splitter:hover::after,.pane-splitter:focus-visible::after,.pane-splitter.is-dragging::after{background:#72cdbf}
+body.is-resizing-panes,body.is-resizing-panes *{cursor:col-resize!important;user-select:none!important}
+@media(max-width:800px){main aside,.is-editing main aside{padding:28px 12px}.editor-panel{flex-basis:var(--editor-width)}}
+
+/* Save and error messages stay visible while reading long documents. */
+#status:not(:empty){position:fixed;z-index:900;top:60px;right:20px;max-width:min(440px,calc(100vw - 40px));margin:0;padding:10px 14px;border:1px solid #526174;border-radius:8px;background:#182333;color:#f3d0c7;box-shadow:0 8px 24px #0008;overflow-wrap:anywhere;pointer-events:none}
