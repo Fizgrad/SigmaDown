@@ -5,6 +5,7 @@ import { createCloseHandler } from './window-close.js';
 import { createPaneLayout } from './pane-layout.js';
 import { createHeadingIds, detectLineEnding, serializeText } from './document-format.js';
 import { openDocumentSafely } from './open-document.js';
+import { createMathExtensions } from './markdown-math.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
@@ -25,10 +26,7 @@ function slot(tex, display) {
   math.set(id, { tex, display });
   return `<${display ? 'div' : 'span'} class="math-slot" data-math-id="${id}"></${display ? 'div' : 'span'}>`;
 }
-marked.use({ extensions: [
-  { name: 'math', level: 'block', start: s => { const a = s.indexOf('$$'), b = s.indexOf('\\['); return a < 0 ? b : b < 0 ? a : Math.min(a, b); }, tokenizer(s) { const m = s.match(/^\$\$([\s\S]*?)\$\$/) || s.match(/^\\\[([\s\S]*?)\\\]/); if (m) return { type: 'math', raw: m[0], html: slot(m[1].trim(), true) }; }, renderer: t => t.html },
-  { name: 'inlineMath', level: 'inline', start: s => { const m = s.match(/\\\(|\$(?!\$)/); return m?.index; }, tokenizer(s) { let end; if (s.startsWith('\\(')) { end = s.indexOf('\\)', 2); if (end >= 0) return { type: 'inlineMath', raw: s.slice(0, end + 2), html: slot(s.slice(2, end).trim(), false) }; } else if (s[0] === '$' && s[1] !== '$') { end = s.indexOf('$', 1); if (end > 0 && s[end - 1] !== '\\') return { type: 'inlineMath', raw: s.slice(0, end + 1), html: slot(s.slice(1, end).trim(), false) }; } }, renderer: t => t.html }
-] });
+marked.use({ extensions: createMathExtensions(slot) });
 function loadMath() {
   if (!mathLoader) {
     window.MathJax = { startup: { typeset: false }, tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true } };
@@ -49,10 +47,50 @@ async function render(doc) {
   const ids = createHeadingIds(headings.map(h => h.textContent));
   headings.forEach((h, i) => { h.id = ids[i]; const a = document.createElement('a'); a.href = `#${encodeURIComponent(h.id)}`; a.textContent = h.textContent; a.className = `level-${h.tagName[1]}`; toc.append(a); });
   article.querySelectorAll('pre code:not(.language-mermaid)').forEach(el => hljs.highlightElement(el));
-  article.querySelectorAll('pre:not(:has(.language-mermaid))').forEach(pre => { const b = document.createElement('button'); b.className = 'copy'; b.textContent = '复制'; b.addEventListener('click', async () => { try { await navigator.clipboard.writeText(pre.querySelector('code')?.textContent || pre.textContent); b.textContent = '已复制'; setTimeout(() => b.textContent = '复制', 1500); } catch { b.textContent = '复制失败'; } }); pre.append(b); });
+  article.querySelectorAll('pre:not(:has(.language-mermaid))').forEach(pre => {
+    const text = pre.querySelector('code')?.textContent ?? pre.textContent;
+    const button = document.createElement('button');
+    button.className = 'copy';
+    button.textContent = '复制';
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = '已复制';
+        setTimeout(() => button.textContent = '复制', 1500);
+      } catch { button.textContent = '复制失败'; }
+    });
+    pre.append(button);
+  });
   if (article.querySelector('.math-slot')) { try { await loadMath(); if (current !== generation) return; await window.MathJax.typesetPromise([article]); if (current !== generation) return; } catch { if (current === generation) $('#status').textContent = '公式渲染失败。'; } }
   const diagrams = [...article.querySelectorAll('pre code.language-mermaid')];
-  if (diagrams.length) { try { mermaidLoader ||= import('mermaid'); const { default: mermaid } = await mermaidLoader; if (current !== generation) return; mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' }); for (const [i, code] of diagrams.entries()) { try { const key = `${i}\0${code.textContent}`; let svg = diagramCache.get(key); if (!svg) { ({ svg } = await mermaid.render(`diagram-${current}-${i}`, code.textContent)); if (current !== generation) return; if (diagramCache.size >= 32) diagramCache.delete(diagramCache.keys().next().value); diagramCache.set(key, svg); } if (current !== generation) return; const box = document.createElement('div'); box.className = 'diagram'; box.innerHTML = svg; code.parentElement.replaceWith(box); } catch { code.parentElement.insertAdjacentText('beforebegin', '图表渲染失败：'); } } } catch { if (current === generation) $('#status').textContent = '图表加载失败。'; } }
+  if (diagrams.length) {
+    try {
+      mermaidLoader ||= import('mermaid');
+      const { default: mermaid } = await mermaidLoader;
+      if (current !== generation) return;
+      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict', suppressErrorRendering: true });
+      for (const [i, code] of diagrams.entries()) {
+        try {
+          const key = `${i}\0${code.textContent}`;
+          let svg = diagramCache.get(key);
+          if (!svg) {
+            ({ svg } = await mermaid.render(`diagram-${current}-${i}`, code.textContent));
+            if (current !== generation) return;
+            if (diagramCache.size >= 32) diagramCache.delete(diagramCache.keys().next().value);
+            diagramCache.set(key, svg);
+          }
+          if (current !== generation) return;
+          const box = document.createElement('div');
+          box.className = 'diagram';
+          box.innerHTML = svg;
+          code.parentElement.replaceWith(box);
+        } catch {
+          if (current !== generation) return;
+          code.parentElement.insertAdjacentText('beforebegin', '图表渲染失败：');
+        }
+      }
+    } catch { if (current === generation) $('#status').textContent = '图表加载失败。'; }
+  }
 }
 const editor = $('#editor');
 const paneLayout = createPaneLayout({ container: document.querySelector('main'), sidebarSplitter: $('#sidebar-splitter'), editorSplitter: $('#editor-splitter') });
@@ -107,6 +145,10 @@ function showDocument(doc, path, edit = false) {
   $('#welcome').hidden = true;
   article.hidden = false;
   updateDocumentUI();
+  $('.content').scrollTop = 0;
+  $('#sidebar').scrollTop = 0;
+  editor.scrollTop = 0;
+  editor.scrollLeft = 0;
   scheduleRender(true);
   if (edit) editor.focus();
 }
