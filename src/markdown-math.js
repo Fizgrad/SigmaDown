@@ -3,11 +3,6 @@ export function createMathExtensions(slot) {
     {
       name: 'math',
       level: 'block',
-      start(source) {
-        const dollar = source.indexOf('$$');
-        const bracket = source.indexOf('\\[');
-        return dollar < 0 ? bracket : bracket < 0 ? dollar : Math.min(dollar, bracket);
-      },
       tokenizer(source) {
         const match = source.match(/^\$\$([\s\S]*?)\$\$/) || source.match(/^\\\[([\s\S]*?)\\\]/);
         if (match) return { type: 'math', raw: match[0], html: slot(match[1].trim(), true) };
@@ -17,8 +12,12 @@ export function createMathExtensions(slot) {
     {
       name: 'inlineMath',
       level: 'inline',
-      start: source => source.match(/\\\(|\$(?!\$)/)?.index,
+      start: source => source.match(/\\[\[(]|\$/)?.index,
       tokenizer(source) {
+        // Let Markdown recognize code spans before looking inside paragraphs.
+        // Display formulas here use an inline wrapper to keep the paragraph valid.
+        const display = source.match(/^\$\$([\s\S]*?)\$\$/) || source.match(/^\\\[([\s\S]*?)\\\]/);
+        if (display) return { type: 'inlineMath', raw: display[0], html: slot(display[1].trim(), true, true) };
         if (source.startsWith('\\(')) {
           const end = source.indexOf('\\)', 2);
           if (end >= 0) return { type: 'inlineMath', raw: source.slice(0, end + 2), html: slot(source.slice(2, end).trim(), false) };

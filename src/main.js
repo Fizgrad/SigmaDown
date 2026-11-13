@@ -21,10 +21,11 @@ let mathId = 0;
 let mathLoader;
 let mermaidLoader;
 const diagramCache = new Map();
-function slot(tex, display) {
+function slot(tex, display, inline = false) {
   const id = String(mathId++);
   math.set(id, { tex, display });
-  return `<${display ? 'div' : 'span'} class="math-slot" data-math-id="${id}"></${display ? 'div' : 'span'}>`;
+  const tag = display && !inline ? 'div' : 'span';
+  return `<${tag} class="math-slot" data-math-id="${id}"></${tag}>`;
 }
 marked.use({ extensions: createMathExtensions(slot) });
 function loadMath() {

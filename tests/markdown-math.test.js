@@ -54,3 +54,35 @@ test('an unmatched or escaped opening dollar remains ordinary Markdown', () => {
   const { formulas } = parse(String.raw`Price \$5; unfinished $x and \$y.`);
   assert.deepEqual(formulas, []);
 });
+
+test('display delimiters inside inline code stay literal without splitting paragraphs', () => {
+  for (const literal of ['$$not math$$', String.raw`\[not math\]`]) {
+    const { html, formulas } = parse(`Before \`${literal}\` after.`);
+    assert.deepEqual(formulas, []);
+    assert.equal(html, `<p>Before <code>${literal}</code> after.</p>\n`);
+  }
+});
+
+test('multiline code spans keep display delimiters literal', () => {
+  const { html, formulas } = parse('`first\n$$not math$$\nlast`');
+  assert.deepEqual(formulas, []);
+  assert.equal(html, '<p><code>first $$not math$$ last</code></p>\n');
+});
+
+test('display math within a paragraph preserves the surrounding text', () => {
+  for (const source of ['Before $$x^2$$ after.', String.raw`Before \[x^2\] after.`]) {
+    const { html, formulas } = parse(source);
+    assert.deepEqual(formulas, [{ tex: 'x^2', display: true }]);
+    assert.equal(html, '<p>Before <span class="math-slot"></span> after.</p>\n');
+  }
+});
+
+test('display math without blank lines renders alongside inline math', () => {
+  const { html, formulas } = parse('Before $x$.\n$$y^2$$\nAfter $z$.');
+  assert.deepEqual(formulas, [
+    { tex: 'x', display: false },
+    { tex: 'y^2', display: true },
+    { tex: 'z', display: false }
+  ]);
+  assert.equal(html, '<p>Before <span class="math-slot"></span>.\n<span class="math-slot"></span>\nAfter <span class="math-slot"></span>.</p>\n');
+});
