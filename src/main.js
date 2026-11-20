@@ -5,6 +5,8 @@ import { createCloseHandler } from './window-close.js';
 import { createPaneLayout } from './pane-layout.js';
 import { createHeadingIds, detectLineEnding, serializeText } from './document-format.js';
 import { openDocumentSafely } from './open-document.js';
+import { annotateSourceTokens, installSourceMapping, installCompatibleStrong } from './markdown-map.js';
+import { installPreviewSync } from './preview-sync.js';
 import { createMathExtensions } from './markdown-math.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -21,6 +23,9 @@ let mathId = 0;
 let mathLoader;
 let mermaidLoader;
 const diagramCache = new Map();
+let renderedSource = null;
+installCompatibleStrong(marked);
+installSourceMapping(marked);
 function slot(tex, display, inline = false) {
   const id = String(mathId++);
   math.set(id, { tex, display });
@@ -38,9 +43,13 @@ function loadMath() {
 async function render(doc) {
   const current = ++generation;
   math.clear(); mathId = 0;
-  const html = marked.parse(doc.content);
+  const tokens = marked.lexer(doc.content);
+  if (editing) annotateSourceTokens(tokens, doc.content);
+  const html = marked.parser(tokens);
   if (window.MathJax?.typesetClear) window.MathJax.typesetClear([article]);
+  globalThis.CSS?.highlights?.delete('sigmadown-preview-selection');
   article.innerHTML = DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, SANITIZE_NAMED_PROPS: true, FORBID_TAGS: ['base','button','embed','form','iframe','input','link','meta','object','style','textarea'], FORBID_ATTR: ['srcdoc','style'] });
+  renderedSource = editing ? doc.content : null;
   article.querySelectorAll('[data-math-id]').forEach(el => { const m = math.get(el.dataset.mathId); if (m) el.textContent = m.display ? `\\[${m.tex}\\]` : `\\(${m.tex}\\)`; });
   $('#welcome').hidden = true; article.hidden = false;
   const toc = $('#toc'); toc.replaceChildren();
@@ -205,7 +214,8 @@ async function saveDocument() {
 $('#open').addEventListener('click', choose); $('#welcome-open').addEventListener('click', choose);
 $('#new-document').addEventListener('click', createDocument); $('#welcome-new').addEventListener('click', createDocument);
 $('#save').addEventListener('click', saveDocument);
-$('#edit-toggle').addEventListener('click', () => { editing = !editing; updateDocumentUI(); if (editing) editor.focus(); });
+$('#edit-toggle').addEventListener('click', () => { editing = !editing; updateDocumentUI(); if (editing) { editor.focus(); scheduleRender(true); } });
+installPreviewSync({ article, editor, isEditing: () => editing, getRenderedSource: () => renderedSource });
 editor.addEventListener('input', () => { $('#status').textContent = ''; updateDocumentUI(); scheduleRender(); });
 document.addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey)) return;
@@ -228,6 +238,11 @@ $('#toc').addEventListener('click', event => {
 });
 article.addEventListener('click', event => {
   const anchor = event.target.closest('a');
+  const selection = window.getSelection();
+  if (anchor && selection && !selection.isCollapsed && article.contains(selection.focusNode)) {
+    event.preventDefault();
+    return;
+  }
   if (anchor && !navigateFragment(event, anchor)) {
     event.preventDefault();
     $('#status').textContent = '外部链接请复制后在浏览器中打开。';

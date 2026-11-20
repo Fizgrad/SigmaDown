@@ -45,3 +45,5 @@ body.is-resizing-panes,body.is-resizing-panes *{cursor:col-resize!important;user
 
 /* Save and error messages stay visible while reading long documents. */
 #status:not(:empty){position:fixed;z-index:900;top:60px;right:20px;max-width:min(440px,calc(100vw - 40px));margin:0;padding:10px 14px;border:1px solid #526174;border-radius:8px;background:#182333;color:#f3d0c7;box-shadow:0 8px 24px #0008;overflow-wrap:anywhere;pointer-events:none}
+
+::highlight(sigmadown-preview-selection){background:#477d82;color:inherit}
